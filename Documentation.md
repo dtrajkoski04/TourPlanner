@@ -37,6 +37,7 @@ The Tour Planner enables users to:
 
 ## Backend Architecture
 
+```plaintext
 Backend
 │
 ├── controller
@@ -67,6 +68,7 @@ Backend
     └── repository
         └── TourRepository.java
         └── TourLogRepository.java
+   ```
 
 
 ## Database Architecture
