@@ -31,6 +31,25 @@ The Tour Planner enables users to:
 - **Database**: PostgreSQL with JPA/Hibernate.
 - **Design Patterns**: Singleton (config), Builder (Tour, TourLog), Observer (data updates with RxJS).
 
+## Backend Architecture
+
+- **controller**:
+- **service**:
+- **model**:
+- **repository**
+- **mapper**:
+- **exception**:
+- **utils**:
+
+
+## Frontend Architecture
+
+
+## Database Architecture
+
+
+## Docker Architecture
+
 ## Milestones
 
 ### Milestone 1: Project Setup
