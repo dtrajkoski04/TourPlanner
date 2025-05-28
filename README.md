@@ -8,4 +8,5 @@
    - `docker exec -it TOUR psql -U TOUR -d TOUR`
 4. Or use your own Docker Container and change the credentials in the `application.properties`
 5. Run the Backend with: `mvn spring-boot:run`
-6. Run the Frontend with: `ng serve`
+6. Clone the Frontend Repository
+7. Run the Frontend with: `ng serve`
