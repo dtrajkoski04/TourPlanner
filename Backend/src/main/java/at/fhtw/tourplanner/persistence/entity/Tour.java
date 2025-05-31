@@ -3,6 +3,9 @@ package at.fhtw.tourplanner.persistence.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "tours")
 @Getter
@@ -32,13 +35,17 @@ public class Tour {
     private Double distance;
 
     @Column(name = "estimated_time")
-    private String estimatedTime; // Consider using Duration or custom format
+    private String estimatedTime;
 
-    @Column(name = "map_image_path")
+    @Column(name="map_image_path")
     private String mapImagePath;
+
 
     private Integer popularity;
 
     @Column(name = "child_friendliness")
     private Double childFriendliness;
+
+    @OneToMany(mappedBy = "tour", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TourLog> tourLogs = new ArrayList<>();
 }
