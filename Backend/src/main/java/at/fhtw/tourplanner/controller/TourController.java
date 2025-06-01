@@ -21,9 +21,8 @@ public class TourController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TourDto> getTour(@PathVariable Long id) {
-        TourDto tour = tourService.getTourById(id);
-        return tour != null ? ResponseEntity.ok(tour) : ResponseEntity.notFound().build();
+    public TourDto getTour(@PathVariable Long id) {
+        return tourService.getTourById(id);      // 404 handled by exception
     }
 
     @PostMapping
@@ -32,14 +31,12 @@ public class TourController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<TourDto> updateTour(@PathVariable Long id, @RequestBody TourDto dto) {
-        TourDto updated = tourService.updateTour(id, dto);
-        return updated != null ? ResponseEntity.ok(updated) : ResponseEntity.notFound().build();
+    public TourDto updateTour(@PathVariable Long id, @RequestBody TourDto dto) {
+        return tourService.updateTour(id, dto);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTour(@PathVariable Long id) {
-        tourService.deleteTour(id);
-        return ResponseEntity.noContent().build();
+    public void deleteTour(@PathVariable Long id) {
+        tourService.deleteTour(id);              // throws 404 if missing
     }
 }

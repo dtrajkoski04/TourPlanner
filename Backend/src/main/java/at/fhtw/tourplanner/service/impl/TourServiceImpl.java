@@ -9,6 +9,7 @@ import at.fhtw.tourplanner.service.mapper.TourMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import at.fhtw.tourplanner.service.exception.TourNotFoundException;
 
 import java.util.List;
 
@@ -30,7 +31,9 @@ public class TourServiceImpl implements TourService {
 
     @Override
     public TourDto getTourById(Long id) {
-        return tourRepo.findById(id).map(mapper::toDto).orElse(null);
+        Tour entity = tourRepo.findById(id)
+                .orElseThrow(() -> new TourNotFoundException(id));
+        return mapper.toDto(entity);
     }
 
     /* -------------------------------------------------------------- */
@@ -54,7 +57,8 @@ public class TourServiceImpl implements TourService {
     @Override @Transactional
     public TourDto updateTour(Long id, TourDto dto) {
         if (!tourRepo.existsById(id)) return null;
-        Tour entity = mapper.toEntity(dto);
+        Tour entity = tourRepo.findById(id)
+                .orElseThrow(() -> new TourNotFoundException(id));
         entity.setId(id);
 
         var info = ors.fetchRouteInfo(entity.getStartLocation(),
@@ -71,6 +75,8 @@ public class TourServiceImpl implements TourService {
     /* -------------------------------------------------------------- */
     @Override
     public void deleteTour(Long id) {
+        if (!tourRepo.existsById(id))
+            throw new TourNotFoundException(id);
         tourRepo.deleteById(id);
     }
 }

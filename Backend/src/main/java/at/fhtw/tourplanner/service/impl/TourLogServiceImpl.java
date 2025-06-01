@@ -11,6 +11,8 @@ import at.fhtw.tourplanner.service.mapper.TourLogMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import at.fhtw.tourplanner.service.exception.TourNotFoundException;
+import at.fhtw.tourplanner.service.exception.LogNotFoundException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -31,15 +33,18 @@ public class TourLogServiceImpl implements TourLogService {
     /* ------------------------------------------------------------ */
     @Override
     public List<TourLogDto> getLogsByTourId(Long tourId) {
+        if (!tourRepo.existsById(tourId))
+            throw new TourNotFoundException(tourId);
+
         return logRepo.findByTourId(tourId).stream().map(mapper::toDto).toList();
     }
 
     @Override
     public TourLogDto getLog(Long tourId, Long logId) {
-        return logRepo.findById(logId)
+        TourLog log = logRepo.findById(logId)
                 .filter(l -> l.getTour().getId().equals(tourId))
-                .map(mapper::toDto)
-                .orElse(null);
+                .orElseThrow(() -> new LogNotFoundException(logId));
+        return mapper.toDto(log);
     }
 
     /* ------------------------------------------------------------ */
@@ -67,7 +72,7 @@ public class TourLogServiceImpl implements TourLogService {
                 .filter(l -> l.getTour().getId().equals(tourId))
                 .orElseThrow(() -> new LogNotFoundException(logId));
 
-        validate(dto, false);                      // partial allowed
+        validate(dto, false);                    // partial allowed
 
         if (dto.getComment()       != null) existing.setComment(dto.getComment());
         if (dto.getDifficulty()    != null) existing.setDifficulty(dto.getDifficulty());
@@ -84,11 +89,10 @@ public class TourLogServiceImpl implements TourLogService {
     /* ------------------------------------------------------------ */
     @Override
     public void deleteLog(Long tourId, Long logId) {
-        logRepo.findById(logId)
+        TourLog log = logRepo.findById(logId)
                 .filter(l -> l.getTour().getId().equals(tourId))
-                .ifPresentOrElse(
-                        logRepo::delete,
-                        () -> { throw new LogNotFoundException(logId); });
+                .orElseThrow(() -> new LogNotFoundException(logId));
+        logRepo.delete(log);
     }
 
     /* ------------------------------------------------------------ */

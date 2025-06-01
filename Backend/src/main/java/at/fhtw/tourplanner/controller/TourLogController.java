@@ -19,25 +19,23 @@ public class TourLogController {
     }
 
     @GetMapping("/{logId}")
-    public ResponseEntity<TourLogDto> get(@PathVariable Long tourId, @PathVariable Long logId) {
-        TourLogDto dto = logService.getLog(tourId, logId);
-        return dto != null ? ResponseEntity.ok(dto) : ResponseEntity.notFound().build();
+    public TourLogDto get(@PathVariable Long tourId, @PathVariable Long logId) {
+        return logService.getLog(tourId, logId);
     }
 
     @PostMapping
-    public ResponseEntity<TourLogDto> create(@PathVariable Long tourId, @RequestBody TourLogDto dto) {
-        return ResponseEntity.ok(logService.createLog(tourId, dto));
+    public TourLogDto create(@PathVariable Long tourId, @RequestBody TourLogDto dto) {
+        return logService.createLog(tourId, dto);
     }
 
     @PutMapping("/{logId}")
-    public ResponseEntity<TourLogDto> update(@PathVariable Long tourId, @PathVariable Long logId, @RequestBody TourLogDto dto) {
-        TourLogDto updated = logService.updateLog(tourId, logId, dto);
-        return updated != null ? ResponseEntity.ok(updated) : ResponseEntity.notFound().build();
+    public TourLogDto update(@PathVariable Long tourId, @PathVariable Long logId,
+                             @RequestBody TourLogDto dto) {
+        return logService.updateLog(tourId, logId, dto);
     }
 
     @DeleteMapping("/{logId}")
-    public ResponseEntity<Void> delete(@PathVariable Long tourId, @PathVariable Long logId) {
+    public void delete(@PathVariable Long tourId, @PathVariable Long logId) {
         logService.deleteLog(tourId, logId);
-        return ResponseEntity.noContent().build();
     }
 }
