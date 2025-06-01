@@ -11,14 +11,13 @@ import at.fhtw.tourplanner.service.mapper.TourLogMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import at.fhtw.tourplanner.service.exception.TourNotFoundException;
-import at.fhtw.tourplanner.service.exception.LogNotFoundException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.OptionalDouble;
 
 @Service
 @RequiredArgsConstructor
@@ -28,14 +27,13 @@ public class TourLogServiceImpl implements TourLogService {
     private final TourRepository    tourRepo;
     private final TourLogMapper     mapper;
 
-    /* ------------------------------------------------------------ */
-    /*  READ                                                        */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* READ                                                               */
+    /* ------------------------------------------------------------------ */
     @Override
     public List<TourLogDto> getLogsByTourId(Long tourId) {
         if (!tourRepo.existsById(tourId))
             throw new TourNotFoundException(tourId);
-
         return logRepo.findByTourId(tourId).stream().map(mapper::toDto).toList();
     }
 
@@ -47,24 +45,28 @@ public class TourLogServiceImpl implements TourLogService {
         return mapper.toDto(log);
     }
 
-    /* ------------------------------------------------------------ */
-    /*  CREATE                                                      */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* CREATE                                                             */
+    /* ------------------------------------------------------------------ */
     @Override @Transactional
     public TourLogDto createLog(Long tourId, TourLogDto dto) {
 
         Tour tour = tourRepo.findById(tourId)
                 .orElseThrow(() -> new TourNotFoundException(tourId));
 
-        validate(dto, true);                       // all required on create
-        TourLog entity = mapper.toEntity(dto, tour);
+        validate(dto, true);
 
-        return mapper.toDto(logRepo.save(entity));
+        TourLog saved = logRepo.save(mapper.toEntity(dto, tour));
+
+        recalcAggregates(tour);                     // ▼ update popularity & child-friendliness
+        tourRepo.save(tour);
+
+        return mapper.toDto(saved);
     }
 
-    /* ------------------------------------------------------------ */
-    /*  UPDATE                                                      */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* UPDATE                                                             */
+    /* ------------------------------------------------------------------ */
     @Override @Transactional
     public TourLogDto updateLog(Long tourId, Long logId, TourLogDto dto) {
 
@@ -72,7 +74,7 @@ public class TourLogServiceImpl implements TourLogService {
                 .filter(l -> l.getTour().getId().equals(tourId))
                 .orElseThrow(() -> new LogNotFoundException(logId));
 
-        validate(dto, false);                    // partial allowed
+        validate(dto, false);
 
         if (dto.getComment()       != null) existing.setComment(dto.getComment());
         if (dto.getDifficulty()    != null) existing.setDifficulty(dto.getDifficulty());
@@ -81,23 +83,34 @@ public class TourLogServiceImpl implements TourLogService {
         if (dto.getTotalTime()     != null) existing.setTotalTime(dto.getTotalTime());
         if (dto.getLogTime()       != null) existing.setLogTime(LocalDateTime.parse(dto.getLogTime()));
 
-        return mapper.toDto(logRepo.save(existing));
+        TourLog saved = logRepo.save(existing);
+
+        recalcAggregates(existing.getTour());
+        tourRepo.save(existing.getTour());
+
+        return mapper.toDto(saved);
     }
 
-    /* ------------------------------------------------------------ */
-    /*  DELETE                                                      */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* DELETE                                                             */
+    /* ------------------------------------------------------------------ */
     @Override
+    @Transactional
     public void deleteLog(Long tourId, Long logId) {
         TourLog log = logRepo.findById(logId)
                 .filter(l -> l.getTour().getId().equals(tourId))
                 .orElseThrow(() -> new LogNotFoundException(logId));
+
+        Tour parent = log.getTour();
         logRepo.delete(log);
+
+        recalcAggregates(parent);
+        tourRepo.save(parent);
     }
 
-    /* ------------------------------------------------------------ */
-    /*  VALIDATION                                                  */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /* VALIDATION                                                         */
+    /* ------------------------------------------------------------------ */
     private void validate(TourLogDto dto, boolean allRequired) {
 
         // logTime
@@ -130,16 +143,63 @@ public class TourLogServiceImpl implements TourLogService {
         if (dto.getTotalDistance() != null && dto.getTotalDistance() < 0)
             throw new LogValidationException("totalDistance must be positive");
 
-        // totalTime hh:mm:ss
+        // totalTime HH:mm:ss
         if (allRequired && dto.getTotalTime() == null)
             throw new LogValidationException("totalTime is required");
-
         if (dto.getTotalTime() != null) {
-            try {
-                LocalTime.parse(dto.getTotalTime());
-            } catch (DateTimeParseException e) {
+            try { LocalTime.parse(dto.getTotalTime()); }
+            catch (DateTimeParseException e) {
                 throw new LogValidationException("totalTime must be HH:mm:ss");
             }
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* AGGREGATE CALCULATION                                              */
+    /* ------------------------------------------------------------------ */
+    private void recalcAggregates(Tour tour) {
+
+        List<TourLog> logs = logRepo.findByTourId(tour.getId());
+        int logCount = logs.size();
+
+        if (logCount == 0) {
+            tour.setPopularity(0);
+            tour.setChildFriendliness(null);
+            return;
+        }
+
+        /* -------- popularity = logCount × avgRating ------------------- */
+        OptionalDouble ratingAvg = logs.stream()
+                .filter(l -> l.getRating() != null)
+                .mapToInt(TourLog::getRating)
+                .average();
+
+        double pop = logCount * ratingAvg.orElse(0);
+        tour.setPopularity((int) Math.round(pop));
+
+        /* -------- child-friendliness ---------------------------------- */
+        double avgDiff = logs.stream().mapToInt(TourLog::getDifficulty).average().orElse(5);
+        double avgDist = logs.stream().mapToDouble(TourLog::getTotalDistance).average().orElse(0);
+        double avgSec  = logs.stream().mapToLong(l -> toSeconds(l.getTotalTime())).average().orElse(0);
+
+        double diffScore     = 6 - avgDiff;                              // 1→5, 5→1
+        double distanceScore = scale(avgDist,   5, 30);                  // 5-→1
+        double timeScore     = scale(avgSec/3600.0, 1, 8);               // hours
+
+        double childFriendly = (diffScore + distanceScore + timeScore) / 3.0;
+        tour.setChildFriendliness(Math.round(childFriendly * 10) / 10.0); // one decimal
+    }
+
+    /** linear 5-to-1 score between bestLimit and worstLimit */
+    private static double scale(double value, double bestLimit, double worstLimit) {
+        if (value <= bestLimit)  return 5;
+        if (value >= worstLimit) return 1;
+        double ratio = (value - bestLimit) / (worstLimit - bestLimit);   // 0-1
+        return 5 - ratio * 4;                                            // 5-→1
+    }
+
+    private static long toSeconds(String hhmmss) {
+        LocalTime t = LocalTime.parse(hhmmss);
+        return t.toSecondOfDay();
     }
 }
