@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
@@ -128,9 +129,11 @@ public class TourLogServiceImpl implements TourLogService {
         // totalTime hh:mm:ss
         if (allRequired && dto.getTotalTime() == null)
             throw new LogValidationException("totalTime is required");
+
         if (dto.getTotalTime() != null) {
-            try { Duration.parse("PT" + dto.getTotalTime().replace(":", "H") + "M"); }
-            catch (Exception e) {
+            try {
+                LocalTime.parse(dto.getTotalTime());
+            } catch (DateTimeParseException e) {
                 throw new LogValidationException("totalTime must be HH:mm:ss");
             }
         }
