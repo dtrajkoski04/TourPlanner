@@ -9,6 +9,19 @@ import org.springframework.web.bind.annotation.*;
 @ControllerAdvice
 public class RestExceptionHandler {
 
+    @ExceptionHandler(LogValidationException.class)
+    public ResponseEntity<ApiError> handleLogValidation(LogValidationException ex,
+                                                        HttpServletRequest req) {
+        return build(ex, HttpStatus.BAD_REQUEST, req);   // 400
+    }
+
+    @ExceptionHandler({TourNotFoundException.class, LogNotFoundException.class})
+    public ResponseEntity<ApiError> handleLogNotFound(RuntimeException ex,
+                                                      HttpServletRequest req) {
+        return build(ex, HttpStatus.NOT_FOUND, req);     // 404
+    }
+
+
     @ExceptionHandler(InvalidTransportTypeException.class)
     public ResponseEntity<ApiError> handleTransport(InvalidTransportTypeException ex,
                                                     HttpServletRequest req) {
