@@ -5,120 +5,160 @@ import at.fhtw.tourplanner.persistence.entity.TourLog;
 import at.fhtw.tourplanner.persistence.repository.TourRepository;
 import at.fhtw.tourplanner.service.ReportService;
 import at.fhtw.tourplanner.service.exception.TourNotFoundException;
+import com.lowagie.text.*;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.util.IntSummaryStatistics;
 import java.util.Locale;
 
-/**
- * Creates Markdown reports with fixed-width columns,
- * so the table is readable in raw form and
- * renders nicely in any Markdown viewer.
- */
 @Service
 @RequiredArgsConstructor
 public class ReportServiceImpl implements ReportService {
 
     private final TourRepository tourRepo;
 
-    /* ------------------------------------------------------------ */
-    /*  Single-tour report                                          */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /*  SINGLE TOUR REPORT                                                */
+    /* ------------------------------------------------------------------ */
     @Override
     public byte[] generateTourReport(Long id) {
 
         Tour t = tourRepo.findById(id).orElseThrow(() -> new TourNotFoundException(id));
 
-        /* --- Head ------------------------------------------------ */
-        StringBuilder sb = new StringBuilder()
-                .append("# Tour Report – ").append(t.getName()).append("\n\n")
-                .append("**Description:** ").append(t.getDescription()).append("\n\n")
-                .append("```\n")                                 // monospace block
-                .append(pad("From", 15)).append(pad("To", 15))
-                .append(pad("Transport", 12)).append(pad("Distance", 10))
-                .append("Est.Time").append("\n")
-                .append(repeat('-', 65)).append("\n")
-                .append(pad(t.getStartLocation(), 15))
-                .append(pad(t.getEndLocation(),   15))
-                .append(pad(t.getTransportType(), 12))
-                .append(String.format(Locale.US,"%8.2fkm ", t.getDistance()))
-                .append(t.getEstimatedTime()).append("\n")
-                .append("```\n\n")
-                .append("> Popularity: ").append(t.getPopularity())
-                .append("   |   Child-friendliness: ")
-                .append(t.getChildFriendliness()).append("\n\n")
-                .append("## Logs\n")
-                .append("```\n")
-                .append(pad("Date", 12)).append(pad("Diff", 6))
-                .append(pad("Km", 8)).append(pad("Time", 10))
-                .append(pad("Rating", 8)).append("Comment\n")
-                .append(repeat('-', 80)).append("\n");
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-        /* --- Logs ------------------------------------------------ */
-        t.getTourLogs().forEach(l -> sb.append(pad(l.getLogTime().toLocalDate().toString(), 12))
-                .append(pad(l.getDifficulty().toString(), 6))
-                .append(String.format(Locale.US,"%6.2f  ", l.getTotalDistance()))
-                .append(pad(l.getTotalTime(), 10))
-                .append(pad(l.getRating().toString(), 8))
-                .append(l.getComment() == null ? "" : l.getComment().replace("\n"," "))
-                .append("\n"));
-        sb.append("```\n");
+            Document doc = new Document();
+            PdfWriter.getInstance(doc, baos);
+            doc.open();
 
-        return sb.toString().getBytes();
+            Font h1 = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18);
+            Font h2 = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14);
+            Font normal = FontFactory.getFont(FontFactory.HELVETICA, 11);
+
+            /* Titel & Beschreibung ---------------------------------- */
+            doc.add(new Paragraph("Tour Report – " + t.getName(), h1));
+            doc.add(new Paragraph(" "));
+            doc.add(new Paragraph(t.getDescription(), normal));
+            doc.add(Chunk.NEWLINE);
+
+            /* Überblickstabelle ------------------------------------- */
+            PdfPTable info = new PdfPTable(5);
+            info.setWidthPercentage(100);
+            addHeader(info, "From"); addHeader(info, "To");
+            addHeader(info, "Transport"); addHeader(info, "Distance");
+            addHeader(info, "Est. Time");
+
+            info.addCell(t.getStartLocation());
+            info.addCell(t.getEndLocation());
+            info.addCell(t.getTransportType());
+            info.addCell(String.format(Locale.US, "%.2f km", t.getDistance()));
+            info.addCell(t.getEstimatedTime());
+            doc.add(info);
+
+            doc.add(Chunk.NEWLINE);
+            doc.add(new Paragraph("Popularity: " + t.getPopularity(), normal));
+            doc.add(new Paragraph("Child-friendliness: " + t.getChildFriendliness(), normal));
+            doc.add(Chunk.NEWLINE);
+
+            /* Log-Tabelle ------------------------------------------- */
+            doc.add(new Paragraph("Logs", h2));
+            PdfPTable logs = new PdfPTable(6);
+            logs.setWidthPercentage(100);
+            addHeader(logs, "Date"); addHeader(logs, "Diff");
+            addHeader(logs, "Km");   addHeader(logs, "Time");
+            addHeader(logs, "Rating"); addHeader(logs, "Comment");
+
+            for (TourLog l : t.getTourLogs()) {
+                logs.addCell(l.getLogTime().toLocalDate().toString());
+                logs.addCell(l.getDifficulty().toString());
+                logs.addCell(String.format(Locale.US, "%.2f", l.getTotalDistance()));
+                logs.addCell(l.getTotalTime());
+                logs.addCell(l.getRating().toString());
+                logs.addCell(l.getComment() == null ? "" : l.getComment());
+            }
+            doc.add(logs);
+
+            doc.close();
+            return baos.toByteArray();
+
+        } catch (Exception e) {
+            throw new RuntimeException("PDF generation failed", e);
+        }
     }
 
-    /* ------------------------------------------------------------ */
-    /*  Summary report                                              */
-    /* ------------------------------------------------------------ */
+    /* ------------------------------------------------------------------ */
+    /*  SUMMARY REPORT                                                    */
+    /* ------------------------------------------------------------------ */
     @Override
     public byte[] generateSummaryReport() {
 
-        StringBuilder sb = new StringBuilder("# Tour Summary Report\n\n```\n")
-                .append(pad("Tour", 22)).append(pad("Logs", 6))
-                .append(pad("Ø Km", 10)).append(pad("Ø Time", 10))
-                .append("Ø Rating\n")
-                .append(repeat('-', 60)).append("\n");
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-        tourRepo.findAll().forEach(t -> {
+            Document doc = new Document();
+            PdfWriter.getInstance(doc, baos);
+            doc.open();
 
-            /* rating average */
-            IntSummaryStatistics rs = t.getTourLogs().stream()
-                    .filter(l -> l.getRating() != null)
-                    .mapToInt(TourLog::getRating).summaryStatistics();
-            double avgRating = rs.getCount() == 0 ? 0 : rs.getAverage();
+            Font h1 = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18);
+            doc.add(new Paragraph("Tour Summary Report", h1));
+            doc.add(Chunk.NEWLINE);
 
-            /* distance average */
-            double avgKm = t.getTourLogs().stream()
-                    .mapToDouble(TourLog::getTotalDistance).average().orElse(0);
+            PdfPTable tbl = new PdfPTable(5);
+            tbl.setWidthPercentage(100);
+            addHeader(tbl, "Tour");
+            addHeader(tbl, "Logs");
+            addHeader(tbl, "Ø Km");
+            addHeader(tbl, "Ø Time");
+            addHeader(tbl, "Ø Rating");
 
-            /* time average */
-            long avgSec = (long) t.getTourLogs().stream()
-                    .mapToLong(l -> LocalTime.parse(l.getTotalTime()).toSecondOfDay())
-                    .average().orElse(0);
-            String avgTime = String.format("%02d:%02d:%02d",
-                    avgSec / 3600, (avgSec % 3600) / 60, avgSec % 60);
+            for (Tour t : tourRepo.findAll()) {
 
-            sb.append(pad(t.getName(), 22))
-                    .append(pad(Integer.toString(t.getTourLogs().size()), 6))
-                    .append(pad(String.format(Locale.US,"%.2f", avgKm), 10))
-                    .append(pad(avgTime, 10))
-                    .append(String.format(Locale.US,"%.1f", avgRating)).append("\n");
-        });
+                /* rating Ø ------------------------------------------ */
+                IntSummaryStatistics rs = t.getTourLogs().stream()
+                        .filter(l -> l.getRating() != null)
+                        .mapToInt(TourLog::getRating).summaryStatistics();
+                double avgRating = rs.getCount() == 0 ? 0 : rs.getAverage();
 
-        sb.append("```\n");
-        return sb.toString().getBytes();
+                /* distance Ø ---------------------------------------- */
+                double avgKm = t.getTourLogs().stream()
+                        .mapToDouble(TourLog::getTotalDistance).average().orElse(0);
+
+                /* time Ø -------------------------------------------- */
+                long avgSec = (long) t.getTourLogs().stream()
+                        .mapToLong(l -> LocalTime.parse(l.getTotalTime()).toSecondOfDay())
+                        .average().orElse(0);
+                String avgTime = String.format("%02d:%02d:%02d",
+                        avgSec / 3600, (avgSec % 3600) / 60, avgSec % 60);
+
+                /* rows ---------------------------------------------- */
+                tbl.addCell(t.getName());
+                tbl.addCell(String.valueOf(t.getTourLogs().size()));
+                tbl.addCell(String.format(Locale.US, "%.2f", avgKm));
+                tbl.addCell(avgTime);
+                tbl.addCell(String.format(Locale.US, "%.1f", avgRating));
+            }
+
+            doc.add(tbl);
+            doc.close();
+            return baos.toByteArray();
+
+        } catch (Exception e) {
+            throw new RuntimeException("PDF generation failed", e);
+        }
     }
 
-    /* ------------------------------------------------------------ */
-    /*  Helper                                                      */
-    /* ------------------------------------------------------------ */
-    private static String pad(String s, int len) {
-        return (s.length() >= len)
-                ? s.substring(0, len - 1) + " "
-                : String.format("%-" + len + "s", s);
+    /* ------------------------------------------------------------------ */
+    /*  helper                                                            */
+    /* ------------------------------------------------------------------ */
+    private static void addHeader(PdfPTable table, String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11)));
+        cell.setGrayFill(0.85f);
+        table.addCell(cell);
     }
-    private static String repeat(char c, int n) { return String.valueOf(c).repeat(n); }
 }

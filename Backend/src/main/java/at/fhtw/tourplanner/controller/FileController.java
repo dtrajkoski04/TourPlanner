@@ -34,21 +34,19 @@ public class FileController {
 
     @GetMapping("/report/tour/{id}")
     public ResponseEntity<byte[]> tourReport(@PathVariable Long id) {
-        byte[] md = reportService.generateTourReport(id);
+        byte[] pdf = reportService.generateTourReport(id);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"tour-" + id + ".md\"")
-                .contentType(MediaType.TEXT_PLAIN)
-                .body(md);
+                .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"tour-"+id+".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     @GetMapping("/report/summary")
     public ResponseEntity<byte[]> summaryReport() {
-        byte[] md = reportService.generateSummaryReport();
+        byte[] pdf = reportService.generateSummaryReport();
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"summary.md\"")
-                .contentType(MediaType.TEXT_PLAIN)
-                .body(md);
+                .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"summary.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }
