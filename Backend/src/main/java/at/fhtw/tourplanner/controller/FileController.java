@@ -5,6 +5,9 @@ import at.fhtw.tourplanner.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequiredArgsConstructor
@@ -25,9 +28,17 @@ public class FileController {
                 .body(data);
     }
 
-    @PostMapping(value = "/import", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public void importJson(@RequestBody byte[] file) {
-        exportService.importTours(file);
+    @PostMapping(value = "/import",
+            consumes = { MediaType.APPLICATION_JSON_VALUE,
+                    MediaType.APPLICATION_PDF_VALUE })
+    public void importRaw(@RequestBody byte[] body) {
+        exportService.importTours(body);          // JSON  oder  raw-PDF
+    }
+
+    /* ------------- multipart -------------------- */
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void importMultipart(@RequestParam("file") MultipartFile file) throws IOException {
+        exportService.importTours(file.getBytes());   // PDF aus multipart
     }
 
     /* ------------- reports --------------------------------------- */
